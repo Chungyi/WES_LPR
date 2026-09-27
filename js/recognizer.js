@@ -33,12 +33,22 @@ let loading = null;
 let backend = 'CPU';
 let detModelBytes = null; // 保留偵測模型，GPU 出問題時用來改建 CPU 版
 let detInput = null;      // 偵測模型的輸入資料，重複使用（每張約 4.9 MB）
+let preferCpu = false;
 
 const progressListeners = new Set();
 let lastProgress = 0;
 
 export function modelsReady() {
   return !!(detector && ocr);
+}
+
+/**
+ * 指定只用 CPU（iPhone 上 GPU 長時間執行可能讓網頁記憶體不足而被系統重新載入）。
+ * 模型已經用 GPU 載入時，會立刻改建成 CPU 版。
+ */
+export async function setPreferCpu(on) {
+  preferCpu = on;
+  if (on && detector && backend === 'GPU') await switchToCpu();
 }
 
 /** 車牌偵測目前使用 'GPU' 或 'CPU' */
@@ -71,7 +81,7 @@ export function loadModels(onProgress) {
       progressListeners.forEach((fn) => fn(lastProgress));
     };
 
-    const useGpu = await hasWebGPU();
+    const useGpu = !preferCpu && (await hasWebGPU());
     const [ortModule, detBytes, ocrBytes] = await Promise.all([
       import(useGpu ? ORT_WEBGPU_URL : ORT_WASM_URL),
       fetchWithProgress(DETECTOR.url, (n) => { received.det = n; report(); }),
@@ -83,7 +93,7 @@ export function loadModels(onProgress) {
     const cpu = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
 
     detector = null;
-    if (useGpu) {
+    if (useGpu && !preferCpu) {
       try {
         detector = await ort.InferenceSession.create(detBytes, { executionProviders: ['webgpu'], graphOptimizationLevel: 'all' });
         await warmUp(detector, 'float32', [1, 3, DETECTOR.size, DETECTOR.size]);
@@ -150,8 +160,13 @@ export async function readPhoto(file) {
   return canvas;
 }
 
+/** 畫面來源的尺寸：canvas 用 width/height，video 用 videoWidth/videoHeight */
+function sizeOf(source) {
+  return { w: source.videoWidth || source.width, h: source.videoHeight || source.height };
+}
+
 /**
- * 辨識照片中所有車牌。
+ * 辨識照片或影片畫面中所有車牌（source 可以是 canvas 或 video）。
  * 回傳 [{ box: {x1,y1,x2,y2}, score, text, confidence }]，依左到右排序。
  */
 export async function recognizePlates(canvas, { scoreThreshold = DETECTOR.scoreThreshold } = {}) {
@@ -196,7 +211,7 @@ export async function readPlateAt(canvas, box) {
 
 async function detect(canvas, scoreThreshold) {
   const S = DETECTOR.size;
-  const { width: w, height: h } = canvas;
+  const { w, h } = sizeOf(canvas);
   const r = Math.min(S / w, S / h);
   const nw = Math.round(w * r);
   const nh = Math.round(h * r);

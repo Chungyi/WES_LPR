@@ -1,11 +1,15 @@
 // 即時辨識畫面：開啟相機，持續辨識畫面中的車牌，在車牌上方疊加結果標籤
 
 import { $, h, renderResult, toast } from './ui.js';
-import { loadModels, modelsReady, recognizePlates, getBackend } from './recognizer.js';
+import { loadModels, modelsReady, recognizePlates, getBackend, setPreferCpu } from './recognizer.js';
 import { PlateTracker } from './tracker.js';
 
-const MAX_FRAME_SIDE = 1920; // 送去辨識的畫面最長邊
 const MIN_INTERVAL_MS = 60;  // 兩次辨識之間至少間隔，讓畫面保持流暢、手機不會太燙
+
+// 即時辨識進行中的標記：網頁若在辨識中被系統重新載入（記憶體不足），下次會看到這個標記，
+// 自動改用 CPU。網址加 ?cpu=1 強制用 CPU、?gpu=1 恢復用 GPU。
+const RUNNING_KEY = 'wes-lpr-live-running';
+const CPU_KEY = 'wes-lpr-live-cpu';
 
 let deps = null;     // 由 app.js 提供：getIndex, isUsable, showView, showMain, openOwner
 let stream = null;
@@ -14,10 +18,10 @@ let paused = false;
 let loopId = 0;      // 每次重新啟動就換一個編號，舊的迴圈會自動結束
 let torchOn = false;
 let avgMs = 0;
+let frameCount = 0;
+let crashNotice = false;
 const tracker = new PlateTracker();
 const labels = new Map(); // track id → { box, label }
-const frame = document.createElement('canvas');
-let frameCtx = null;
 
 export function initLive(d) {
   deps = d;
@@ -37,6 +41,27 @@ export function initLive(d) {
     else startCamera();
   });
   window.addEventListener('resize', () => active && layoutLabels());
+
+  const param = new URLSearchParams(location.search);
+  if (param.has('gpu')) storage('remove', CPU_KEY);
+  if (param.has('cpu')) storage('set', CPU_KEY, '1');
+  if (storage('get', RUNNING_KEY)) {
+    // 上次即時辨識時網頁被重新載入，很可能是記憶體不足：改用 CPU
+    storage('remove', RUNNING_KEY);
+    storage('set', CPU_KEY, '1');
+    crashNotice = true;
+  }
+}
+
+/** localStorage 可能被瀏覽器封鎖（私密瀏覽等），一律包在 try 裡 */
+function storage(op, key, value) {
+  try {
+    if (op === 'get') return localStorage.getItem(key);
+    if (op === 'set') localStorage.setItem(key, value);
+    if (op === 'remove') localStorage.removeItem(key);
+  } catch {
+    return null;
+  }
 }
 
 async function open() {
@@ -46,6 +71,11 @@ async function open() {
   deps.showView('view-live');
   updatePauseButton();
   clearLabels();
+  if (storage('get', CPU_KEY)) await setPreferCpu(true);
+  if (crashNotice) {
+    crashNotice = false;
+    toast('上次即時辨識時網頁記憶體不足，已改用 CPU 模式');
+  }
   loadModels().catch(() => {});
   await startCamera();
 }
@@ -99,11 +129,14 @@ async function startCamera() {
     setBusy(false);
   }
   setStatus('對準車牌，保持手機穩定…');
+  frameCount = 0;
+  storage('set', RUNNING_KEY, String(Date.now()));
   runLoop(++loopId);
 }
 
 function stopCamera() {
   loopId++;
+  storage('remove', RUNNING_KEY);
   stream?.getTracks().forEach((t) => t.stop());
   stream = null;
   $('live-video').srcObject = null;
@@ -179,35 +212,26 @@ async function runLoop(id) {
       continue;
     }
 
-    const scale = Math.min(1, MAX_FRAME_SIDE / Math.max(video.videoWidth, video.videoHeight));
-    const fw = Math.round(video.videoWidth * scale);
-    const fh = Math.round(video.videoHeight * scale);
-    // 只有尺寸改變時才重設畫布：每次設定 width/height 都會重新配置畫布記憶體，
-    // iPhone 回收得慢，每秒好幾次會在十幾秒內用光記憶體而當掉
-    if (frame.width !== fw || frame.height !== fh) {
-      frame.width = fw;
-      frame.height = fh;
-    }
-    frameCtx ??= frame.getContext('2d');
-    frameCtx.drawImage(video, 0, 0, fw, fh);
-
+    // 先拍一張快照，偵測和讀文字都用同一張（影片一直在變，否則裁切位置會偏掉）。
+    // 用 ImageBitmap 而不是畫布：用完立刻 close() 釋放記憶體，不必等瀏覽器回收；
+    // iPhone 回收很慢，每秒複製好幾張 1080×1920 畫面會在一分鐘內用光記憶體而被系統重新載入。
     let plates;
+    let snapshot = null;
     try {
-      plates = await recognizePlates(frame);
+      snapshot = await grabFrame(video);
+      plates = await recognizePlates(snapshot);
     } catch (err) {
       console.error(err);
       setStatus('辨識發生錯誤：' + (err.message || '未知錯誤'), 'error');
       await sleep(1000);
       continue;
+    } finally {
+      if (snapshot !== video) snapshot?.close?.();
     }
     if (id !== loopId) break;
+    frameCount += 1;
 
-    // 座標換回原始畫面尺寸，交給追蹤器投票
-    const inv = 1 / scale;
-    tracker.update(plates.map((p) => ({
-      ...p,
-      box: { x1: p.box.x1 * inv, y1: p.box.y1 * inv, x2: p.box.x2 * inv, y2: p.box.y2 * inv },
-    })));
+    tracker.update(plates);
     renderLabels();
 
     const ms = performance.now() - t0;
@@ -215,10 +239,23 @@ async function runLoop(id) {
     if (!paused) {
       const n = visibleTracks().length;
       const rate = avgMs < 1000 ? `每秒 ${(1000 / avgMs).toFixed(1)} 次` : `每 ${(avgMs / 1000).toFixed(1)} 秒一次`;
-      setStatus(`${n ? `畫面中 ${n} 個車牌` : '對準車牌，保持手機穩定…'}｜${rate}（${getBackend()}）`);
+      setStatus(`${n ? `畫面中 ${n} 個車牌` : '對準車牌，保持手機穩定…'}｜${rate}（${getBackend()}）｜第 ${frameCount} 張`);
     }
     await sleep(Math.max(0, MIN_INTERVAL_MS - ms));
   }
+}
+
+let bitmapSupported = typeof createImageBitmap === 'function';
+async function grabFrame(video) {
+  if (bitmapSupported) {
+    try {
+      return await createImageBitmap(video);
+    } catch (err) {
+      console.warn('createImageBitmap 無法使用，改為直接讀取影片', err);
+      bitmapSupported = false;
+    }
+  }
+  return video;
 }
 
 function sleep(ms) {
