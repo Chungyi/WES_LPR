@@ -13,6 +13,14 @@ const DETECTOR = {
   scoreThreshold: 0.35,
 };
 
+// 小一號的偵測模型：用 CPU 即時辨識時使用（iPhone），約快 2.7 倍，但遠處的小車牌比較難抓到。
+// 需要時才下載。
+const FAST_DETECTOR = {
+  url: 'models/plate-detector-yolov9t-384.onnx',
+  bytes: 7771218,
+  size: 384,
+};
+
 const OCR = {
   url: 'models/plate-ocr-cct-s-v2.onnx',
   bytes: 5262230,
@@ -32,7 +40,9 @@ let ocr = null;
 let loading = null;
 let backend = 'CPU';
 let detModelBytes = null; // 保留偵測模型，GPU 出問題時用來改建 CPU 版
-let detInput = null;      // 偵測模型的輸入資料，重複使用（每張約 4.9 MB）
+const detInputs = {};     // 偵測模型的輸入資料，依尺寸重複使用（640 每張約 4.9 MB）
+let fastDetector = null;
+let fastLoading = null;
 
 // ---------- 使用 GPU 或 CPU ----------
 // iPhone（WebKit）的 GPU 運算長時間執行會用光記憶體，網頁被系統關掉（實測 2 分鐘內），
@@ -197,21 +207,44 @@ function sizeOf(source) {
   return { w: source.videoWidth || source.width, h: source.videoHeight || source.height };
 }
 
+/** 下載並載入快速偵測模型（CPU 用）。需先完成 loadModels()。 */
+export function loadFastDetector(onProgress = () => {}) {
+  fastLoading ??= (async () => {
+    await loadModels();
+    const bytes = await fetchWithProgress(FAST_DETECTOR.url, (n) => onProgress(Math.min(1, n / FAST_DETECTOR.bytes)));
+    fastDetector = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+    await warmUp(fastDetector, 'float32', [1, 3, FAST_DETECTOR.size, FAST_DETECTOR.size]);
+  })().catch((err) => {
+    fastLoading = null;
+    throw err;
+  });
+  return fastLoading;
+}
+
+export function fastDetectorReady() {
+  return !!fastDetector;
+}
+
 /**
- * 辨識照片或影片畫面中所有車牌（source 可以是 canvas 或 video）。
+ * 辨識照片或影片畫面中所有車牌（source 可以是 canvas、video 或 ImageBitmap）。
+ * fast: true 時使用快速偵測模型（需先 loadFastDetector）。
  * 回傳 [{ box: {x1,y1,x2,y2}, score, text, confidence }]，依左到右排序。
  */
-export async function recognizePlates(canvas, { scoreThreshold = DETECTOR.scoreThreshold } = {}) {
+export async function recognizePlates(canvas, { scoreThreshold = DETECTOR.scoreThreshold, fast = false } = {}) {
   if (!detector || !ocr) throw new Error('模型尚未載入');
   let boxes;
-  try {
-    boxes = await detect(canvas, scoreThreshold);
-  } catch (err) {
-    if (backend !== 'GPU') throw err;
-    // GPU 執行到一半出錯（例如手機記憶體不足、GPU 被系統收回）：改用 CPU 繼續
-    console.warn('GPU 辨識失敗，改用 CPU', err);
-    await switchToCpu();
-    boxes = await detect(canvas, scoreThreshold);
+  if (fast && fastDetector) {
+    boxes = await detect(canvas, scoreThreshold, fastDetector, FAST_DETECTOR.size);
+  } else {
+    try {
+      boxes = await detect(canvas, scoreThreshold, detector, DETECTOR.size);
+    } catch (err) {
+      if (backend !== 'GPU') throw err;
+      // GPU 執行到一半出錯（例如手機記憶體不足、GPU 被系統收回）：改用 CPU 繼續
+      console.warn('GPU 辨識失敗，改用 CPU', err);
+      await switchToCpu();
+      boxes = await detect(canvas, scoreThreshold, detector, DETECTOR.size);
+    }
   }
   if (!boxes.length) return [];
   const texts = await readTexts(canvas, boxes);
@@ -241,8 +274,7 @@ export async function readPlateAt(canvas, box) {
 
 // ---------- 車牌偵測 ----------
 
-async function detect(canvas, scoreThreshold) {
-  const S = DETECTOR.size;
+async function detect(canvas, scoreThreshold, session, S) {
   const { w, h } = sizeOf(canvas);
   const r = Math.min(S / w, S / h);
   const nw = Math.round(w * r);
@@ -251,7 +283,7 @@ async function detect(canvas, scoreThreshold) {
   const dh = (S - nh) / 2;
 
   // letterbox：等比例縮放，周圍補灰色 (114,114,114)，與模型訓練時相同
-  const ctx = scratch('letterbox', S, S);
+  const ctx = scratch('letterbox' + S, S, S);
   ctx.fillStyle = 'rgb(114,114,114)';
   ctx.fillRect(0, 0, S, S);
   ctx.drawImage(canvas, dw, dh, nw, nh);
@@ -259,16 +291,16 @@ async function detect(canvas, scoreThreshold) {
 
   // RGBA (HWC) → RGB (CHW)，數值 0~1
   const area = S * S;
-  detInput ??= new Float32Array(3 * area);
-  const input = detInput;
+  detInputs[S] ??= new Float32Array(3 * area);
+  const input = detInputs[S];
   for (let i = 0; i < area; i++) {
     input[i] = px[i * 4] / 255;
     input[area + i] = px[i * 4 + 1] / 255;
     input[2 * area + i] = px[i * 4 + 2] / 255;
   }
 
-  const feeds = { [detector.inputNames[0]]: new ort.Tensor('float32', input, [1, 3, S, S]) };
-  const out = (await detector.run(feeds))[detector.outputNames[0]];
+  const feeds = { [session.inputNames[0]]: new ort.Tensor('float32', input, [1, 3, S, S]) };
+  const out = (await session.run(feeds))[session.outputNames[0]];
   const rows = out.dims[0];
   const d = out.data;
 

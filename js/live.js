@@ -1,7 +1,9 @@
 // 即時辨識畫面：開啟相機，持續辨識畫面中的車牌，在車牌上方疊加結果標籤
 
 import { $, h, renderResult, toast } from './ui.js';
-import { loadModels, modelsReady, recognizePlates, getBackend, setPreferCpu } from './recognizer.js';
+import {
+  loadModels, modelsReady, recognizePlates, getBackend, setPreferCpu, loadFastDetector, fastDetectorReady,
+} from './recognizer.js';
 import { PlateTracker } from './tracker.js';
 
 const MIN_INTERVAL_MS = 60;  // 兩次辨識之間至少間隔，讓畫面保持流暢、手機不會太燙
@@ -124,6 +126,17 @@ async function startCamera() {
     }
     setBusy(false);
   }
+  // 用 CPU 時（iPhone）改用小一號的偵測模型，速度約快 2.7 倍
+  if (getBackend() === 'CPU' && !fastDetectorReady()) {
+    setBusy(true);
+    try {
+      await loadFastDetector((p) => setStatus(p < 1 ? `下載快速辨識模型… ${Math.round(p * 100)}%（第一次使用需要下載）` : '準備 AI 模型中…'));
+    } catch (err) {
+      console.warn('快速辨識模型載入失敗，改用一般模型', err);
+    }
+    setBusy(false);
+    if (!active || !stream) return;
+  }
   setStatus('對準車牌，保持手機穩定…');
   frameCount = 0;
   storage('set', RUNNING_KEY, String(Date.now()));
@@ -215,7 +228,7 @@ async function runLoop(id) {
     let snapshot = null;
     try {
       snapshot = await grabFrame(video);
-      plates = await recognizePlates(snapshot);
+      plates = await recognizePlates(snapshot, { fast: useFast() });
     } catch (err) {
       console.error(err);
       setStatus('辨識發生錯誤：' + (err.message || '未知錯誤'), 'error');
@@ -235,10 +248,18 @@ async function runLoop(id) {
     if (!paused) {
       const n = visibleTracks().length;
       const rate = avgMs < 1000 ? `每秒 ${(1000 / avgMs).toFixed(1)} 次` : `每 ${(avgMs / 1000).toFixed(1)} 秒一次`;
-      setStatus(`${n ? `畫面中 ${n} 個車牌` : '對準車牌，保持手機穩定…'}｜${rate}（${getBackend()}）｜第 ${frameCount} 張`);
+      const mode = useFast() ? `${getBackend()}・快速` : getBackend();
+      setStatus(`${n ? `畫面中 ${n} 個車牌` : '對準車牌，保持手機穩定…'}｜${rate}（${mode}）｜第 ${frameCount} 張`);
     }
     await sleep(Math.max(0, MIN_INTERVAL_MS - ms));
   }
+}
+
+/** 用 CPU 時使用快速偵測模型；GPU 中途出錯改用 CPU 時，在背景下載快速模型 */
+function useFast() {
+  if (getBackend() !== 'CPU') return false;
+  if (!fastDetectorReady()) loadFastDetector().catch(() => {});
+  return fastDetectorReady();
 }
 
 let bitmapSupported = typeof createImageBitmap === 'function';
