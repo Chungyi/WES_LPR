@@ -137,9 +137,7 @@ async function detect(canvas, scoreThreshold) {
   const dh = (S - nh) / 2;
 
   // letterbox：等比例縮放，周圍補灰色 (114,114,114)，與模型訓練時相同
-  const lb = document.createElement('canvas');
-  lb.width = lb.height = S;
-  const ctx = lb.getContext('2d', { willReadFrequently: true });
+  const ctx = scratch('letterbox', S, S);
   ctx.fillStyle = 'rgb(114,114,114)';
   ctx.fillRect(0, 0, S, S);
   ctx.drawImage(canvas, dw, dh, nw, nh);
@@ -178,10 +176,7 @@ async function detect(canvas, scoreThreshold) {
 
 async function readTexts(canvas, boxes) {
   const { width: W, height: H, slots, alphabet, padChar } = OCR;
-  const crop = document.createElement('canvas');
-  crop.width = W;
-  crop.height = H;
-  const ctx = crop.getContext('2d', { willReadFrequently: true });
+  const ctx = scratch('crop', W, H);
 
   // 每個車牌裁切後直接拉伸成 128×64（模型設定 keep_aspect_ratio: false），RGB uint8、NHWC
   const input = new Uint8Array(boxes.length * H * W * 3);
@@ -216,6 +211,21 @@ async function readTexts(canvas, boxes) {
     }
     return { text, confidence: text ? confidence : 0 };
   });
+}
+
+// 重複使用的暫存畫布（即時辨識時每秒會呼叫好幾次，避免一直配置新記憶體）
+const scratchCanvases = {};
+function scratch(name, w, h) {
+  let c = scratchCanvases[name];
+  if (!c) {
+    const canvas = document.createElement('canvas');
+    c = scratchCanvases[name] = canvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (c.canvas.width !== w || c.canvas.height !== h) {
+    c.canvas.width = w;
+    c.canvas.height = h;
+  }
+  return c;
 }
 
 function clamp(v, lo, hi) {

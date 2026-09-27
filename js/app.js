@@ -6,6 +6,7 @@ import { loadDataset, saveDataset, clearAll, remainingMs, isExpired } from './st
 import { PlateIndex, normalizePlate } from './match.js';
 import { $, h, typeBadge, renderResult, setOwnerHandler, toast } from './ui.js';
 import { initPhoto } from './photo.js';
+import { initLive } from './live.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -59,6 +60,7 @@ function updateDataStatus() {
   $('search-form').querySelector('button').disabled = expired;
   $('btn-photo-camera').disabled = expired;
   $('btn-photo-album').disabled = expired;
+  $('btn-live').disabled = expired;
   if (expired) $('results').replaceChildren();
 }
 
@@ -163,13 +165,15 @@ function openOwner(rec) {
 
 function bindEvents() {
   setOwnerHandler(openOwner);
-  initPhoto({
+  const viewDeps = {
     getIndex: () => index,
     isUsable: () => !!index && !isExpired(dataset),
     showView,
     showMain,
     openOwner,
-  });
+  };
+  initPhoto(viewDeps);
+  initLive(viewDeps);
   $('btn-download').addEventListener('click', onDownloadClick);
   $('btn-logout').addEventListener('click', onLogout);
   $('search-form').addEventListener('submit', (e) => {

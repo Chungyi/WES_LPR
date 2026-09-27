@@ -65,7 +65,7 @@
       <nav class="modes" aria-label="辨識模式">
         <button id="btn-photo-camera" type="button" class="mode mode-on">📷 拍照辨識<small>用相機拍車牌</small></button>
         <button id="btn-photo-album" type="button" class="mode mode-on">🖼️ 相簿辨識<small>選已拍好的照片</small></button>
-        <button type="button" class="mode" disabled>🎥 即時辨識<small>第 3 階段開放</small></button>
+        <button id="btn-live" type="button" class="mode mode-on">🎥 即時辨識<small>鏡頭對準就辨識</small></button>
       </nav>
     </main>
   </section>
@@ -96,12 +96,40 @@
     </main>
   </section>
 
+  <!-- 即時辨識 -->
+  <section id="view-live" class="view live" hidden>
+    <video id="live-video" autoplay muted playsinline></video>
+    <div id="live-overlay" class="live-overlay"></div>
+    <div id="live-busy" class="busy" hidden><div class="spinner"></div></div>
+    <header class="live-top">
+      <button id="btn-live-back" type="button" class="live-btn">‹ 返回</button>
+      <button id="btn-live-torch" type="button" class="live-btn">🔦 手電筒</button>
+    </header>
+    <footer class="live-bottom">
+      <p id="live-status" class="live-status" role="status"></p>
+      <button id="btn-live-pause" type="button" class="live-btn live-btn-main">⏸ 暫停</button>
+    </footer>
+  </section>
+
   <!-- 照片來源：相機、相簿（照片只在手機上處理，不會上傳） -->
   <input id="file-camera" type="file" accept="image/*" capture="environment" hidden>
   <input id="file-album" type="file" accept="image/*" hidden>
 
   <!-- 車主資訊卡 -->
   <dialog id="dlg-owner" class="sheet"></dialog>
+
+  <!-- 即時辨識：不確定或查無資料時，顯示辨識文字，可修改後重新查詢 -->
+  <dialog id="dlg-live-item" class="sheet">
+    <h2>辨識結果</h2>
+    <p class="muted">文字讀錯的話，可以修改後重新查詢。</p>
+    <form id="live-item-form" class="search search-sm" autocomplete="off">
+      <input id="live-item-input" type="text" autocapitalize="characters" autocorrect="off"
+             spellcheck="false" enterkeyhint="search" aria-label="車牌號碼">
+      <button type="submit" class="btn btn-primary">查詢</button>
+    </form>
+    <div id="live-item-results" class="results live-item-results"></div>
+    <button type="button" class="btn btn-block" data-close>關閉</button>
+  </dialog>
 
   <!-- 重新下載時確認身分 -->
   <dialog id="dlg-download" class="sheet">
