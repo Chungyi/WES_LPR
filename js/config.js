@@ -4,7 +4,7 @@ export const CONFIG = {
   CLIENT_ID: '417454671568-dljpcr15nvv743726haa993a3bun2s50.apps.googleusercontent.com',
 
   // Apps Script 網頁應用程式網址（部署後貼上，結尾是 /exec）
-  API_URL: '',
+  API_URL: 'https://script.google.com/macros/s/AKfycbwcB1wnrK_yd_zFS77e-tDOTvz5cNbV_Vufdou86HkSVm0yWIdTdamomcuaPFde-E1V/exec',
 
   // 只允許這個網域的帳號登入
   DOMAIN: 'wes.tc.edu.tw',
