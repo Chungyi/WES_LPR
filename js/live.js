@@ -17,6 +17,7 @@ let avgMs = 0;
 const tracker = new PlateTracker();
 const labels = new Map(); // track id → { box, label }
 const frame = document.createElement('canvas');
+let frameCtx = null;
 
 export function initLive(d) {
   deps = d;
@@ -179,9 +180,16 @@ async function runLoop(id) {
     }
 
     const scale = Math.min(1, MAX_FRAME_SIDE / Math.max(video.videoWidth, video.videoHeight));
-    frame.width = Math.round(video.videoWidth * scale);
-    frame.height = Math.round(video.videoHeight * scale);
-    frame.getContext('2d').drawImage(video, 0, 0, frame.width, frame.height);
+    const fw = Math.round(video.videoWidth * scale);
+    const fh = Math.round(video.videoHeight * scale);
+    // 只有尺寸改變時才重設畫布：每次設定 width/height 都會重新配置畫布記憶體，
+    // iPhone 回收得慢，每秒好幾次會在十幾秒內用光記憶體而當掉
+    if (frame.width !== fw || frame.height !== fh) {
+      frame.width = fw;
+      frame.height = fh;
+    }
+    frameCtx ??= frame.getContext('2d');
+    frameCtx.drawImage(video, 0, 0, fw, fh);
 
     let plates;
     try {

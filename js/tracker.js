@@ -3,7 +3,8 @@
 
 const DEFAULTS = {
   iouThreshold: 0.2,   // 框的重疊比例超過這個值，視為同一個車牌
-  maxAgeMs: 1500,      // 超過這個時間沒再看到，就移除
+  maxMisses: 2,        // 連續幾張畫面沒看到，就移除（車牌離開畫面後標籤很快消失）
+  maxAgeMs: 1000,      // 超過這個時間沒再看到，也移除（辨識較慢的手機）
   minHits: 2,          // 至少看到幾次才顯示（單次信心很高時例外）
   instantConfidence: 0.8, // 單次信心達到這個值就立刻顯示
   smoothing: 0.7,      // 新位置的權重：越大框跟得越緊，越小移動越平順
@@ -69,7 +70,8 @@ export class PlateTracker {
       }
     }
 
-    this.tracks = this.tracks.filter((t) => now - t.lastSeen <= this.opt.maxAgeMs);
+    for (const t of free) t.misses += 1;
+    this.tracks = this.tracks.filter((t) => t.misses < this.opt.maxMisses && now - t.lastSeen <= this.opt.maxAgeMs);
   }
 
   #hit(t, det, now) {
@@ -80,6 +82,7 @@ export class PlateTracker {
     const weight = Math.max(0.05, det.confidence ?? 0);
     t.votes.set(det.text, (t.votes.get(det.text) ?? 0) + weight);
     t.hits += 1;
+    t.misses = 0;
     t.lastSeen = now;
     t.lastConfidence = det.confidence ?? 0;
 

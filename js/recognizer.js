@@ -31,6 +31,8 @@ let detector = null;
 let ocr = null;
 let loading = null;
 let backend = 'CPU';
+let detModelBytes = null; // 保留偵測模型，GPU 出問題時用來改建 CPU 版
+let detInput = null;      // 偵測模型的輸入資料，重複使用（每張約 4.9 MB）
 
 const progressListeners = new Set();
 let lastProgress = 0;
@@ -76,6 +78,7 @@ export function loadModels(onProgress) {
       fetchWithProgress(OCR.url, (n) => { received.ocr = n; report(); }),
     ]);
     ort = ortModule;
+    detModelBytes = detBytes;
     ort.env.wasm.numThreads = 1; // GitHub Pages 無法開啟跨來源隔離，多執行緒不可用
     const cpu = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
 
@@ -153,12 +156,34 @@ export async function readPhoto(file) {
  */
 export async function recognizePlates(canvas, { scoreThreshold = DETECTOR.scoreThreshold } = {}) {
   if (!detector || !ocr) throw new Error('模型尚未載入');
-  const boxes = await detect(canvas, scoreThreshold);
+  let boxes;
+  try {
+    boxes = await detect(canvas, scoreThreshold);
+  } catch (err) {
+    if (backend !== 'GPU') throw err;
+    // GPU 執行到一半出錯（例如手機記憶體不足、GPU 被系統收回）：改用 CPU 繼續
+    console.warn('GPU 辨識失敗，改用 CPU', err);
+    await switchToCpu();
+    boxes = await detect(canvas, scoreThreshold);
+  }
   if (!boxes.length) return [];
   const texts = await readTexts(canvas, boxes);
   return boxes
     .map((b, i) => ({ ...b, ...texts[i] }))
     .sort((a, b) => a.box.x1 - b.box.x1);
+}
+
+let switching = null;
+function switchToCpu() {
+  switching ??= (async () => {
+    const old = detector;
+    detector = await ort.InferenceSession.create(detModelBytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+    backend = 'CPU';
+    old?.release?.().catch(() => {});
+  })().finally(() => {
+    switching = null;
+  });
+  return switching;
 }
 
 /** 使用者手動框選的區域，直接做文字辨識 */
@@ -187,7 +212,8 @@ async function detect(canvas, scoreThreshold) {
 
   // RGBA (HWC) → RGB (CHW)，數值 0~1
   const area = S * S;
-  const input = new Float32Array(3 * area);
+  detInput ??= new Float32Array(3 * area);
+  const input = detInput;
   for (let i = 0; i < area; i++) {
     input[i] = px[i * 4] / 255;
     input[area + i] = px[i * 4 + 1] / 255;
