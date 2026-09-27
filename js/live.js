@@ -6,7 +6,14 @@ import {
 } from './recognizer.js';
 import { PlateTracker } from './tracker.js';
 
-const MIN_INTERVAL_MS = 60;  // 兩次辨識之間至少間隔，讓畫面保持流暢、手機不會太燙
+// 省電設定：沒必要時少算一點，避免手機（特別是用 CPU 的 iPhone）發燙
+const ACTIVE_INTERVAL_MS = 60;   // 畫面中有車牌：兩次辨識間隔
+const IDLE_INTERVAL_MS = 400;    // 沒看到車牌：放慢到約每秒 2 次
+const STATIC_CHECK_MS = 150;     // 畫面沒變時，多久檢查一次畫面
+const STATIC_REFRESH_MS = 1500;  // 畫面沒變時，最久多久重新辨識一次
+const PIXEL_CHANGE = 16;         // 縮圖上亮度差超過這個值（0～255）的像素，算是「有變化」
+const STATIC_RATIO = 0.015;      // 有變化的像素少於 1.5%，視為畫面沒變
+const AUTO_PAUSE_MS = 30000;     // 連續多久沒看到車牌就自動暫停並關閉相機
 
 // 即時辨識進行中的標記：網頁若在辨識中被系統關掉（記憶體不足），下次會看到這個標記，
 // 自動改用 CPU 並記在這支手機上（使用 GPU 或 CPU 的預設規則見 recognizer.js）。
@@ -18,8 +25,13 @@ let active = false;  // 是否在即時辨識畫面
 let paused = false;
 let loopId = 0;      // 每次重新啟動就換一個編號，舊的迴圈會自動結束
 let torchOn = false;
-let avgMs = 0;
 let frameCount = 0;
+let autoPaused = false;
+let saving = false;         // 最近是否因為畫面沒變而略過辨識
+let lastThumb = null;
+let lastInferAt = 0;
+let lastPlateAt = 0;
+const inferTimes = [];      // 最近 3 秒內每次辨識的時間，用來算每秒幾次
 let crashNotice = false;
 const tracker = new PlateTracker();
 const labels = new Map(); // track id → { box, label }
@@ -28,7 +40,7 @@ export function initLive(d) {
   deps = d;
   $('btn-live').addEventListener('click', open);
   $('btn-live-back').addEventListener('click', close);
-  $('btn-live-pause').addEventListener('click', () => setPaused(!paused));
+  $('btn-live-pause').addEventListener('click', onPauseClick);
   $('btn-live-torch').addEventListener('click', toggleTorch);
   $('live-item-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -39,7 +51,7 @@ export function initLive(d) {
   document.addEventListener('visibilitychange', () => {
     if (!active) return;
     if (document.visibilityState === 'hidden') stopCamera();
-    else startCamera();
+    else if (!autoPaused) startCamera();
   });
   window.addEventListener('resize', () => active && layoutLabels());
 
@@ -66,6 +78,7 @@ async function open() {
   if (!deps.isUsable()) return;
   active = true;
   paused = false;
+  autoPaused = false;
   deps.showView('view-live');
   updatePauseButton();
   clearLabels();
@@ -139,6 +152,10 @@ async function startCamera() {
   }
   setStatus('對準車牌，保持手機穩定…');
   frameCount = 0;
+  lastThumb = null;
+  lastInferAt = 0;
+  lastPlateAt = performance.now();
+  inferTimes.length = 0;
   storage('set', RUNNING_KEY, String(Date.now()));
   runLoop(++loopId);
 }
@@ -196,8 +213,30 @@ async function toggleTorch() {
 
 // ---------- 暫停 ----------
 
+function onPauseClick() {
+  if (autoPaused) {
+    autoPaused = false;
+    paused = false;
+    updatePauseButton();
+    startCamera();
+  } else {
+    setPaused(!paused);
+  }
+}
+
+/** 太久沒看到車牌：關閉相機（相機本身也很耗電），等使用者按「繼續」 */
+function autoPause() {
+  autoPaused = true;
+  paused = true;
+  stopCamera();
+  clearLabels();
+  updatePauseButton();
+  setStatus(`${AUTO_PAUSE_MS / 1000} 秒沒有看到車牌，已自動暫停，避免手機發燙。按「繼續」恢復。`);
+}
+
 function setPaused(on) {
   paused = on;
+  if (!on) lastPlateAt = performance.now();
   const video = $('live-video');
   if (on) video.pause();
   else video.play().catch(() => {});
@@ -220,6 +259,20 @@ async function runLoop(id) {
       await sleep(200);
       continue;
     }
+    if (t0 - lastPlateAt > AUTO_PAUSE_MS) {
+      autoPause();
+      break;
+    }
+
+    // 畫面幾乎沒變（手機對著同一個地方）：沿用上次結果，每 1.5 秒才重新確認一次
+    const thumb = sampleThumb(video);
+    if (lastThumb && changedRatio(thumb, lastThumb) < STATIC_RATIO && t0 - lastInferAt < STATIC_REFRESH_MS) {
+      saving = true;
+      updateLiveStatus();
+      await sleep(STATIC_CHECK_MS);
+      continue;
+    }
+    saving = false;
 
     // 先拍一張快照，偵測和讀文字都用同一張（影片一直在變，否則裁切位置會偏掉）。
     // 用 ImageBitmap 而不是畫布：用完立刻 close() 釋放記憶體，不必等瀏覽器回收；
@@ -239,20 +292,48 @@ async function runLoop(id) {
     }
     if (id !== loopId) break;
     frameCount += 1;
+    lastThumb = thumb;
+    lastInferAt = t0;
+    inferTimes.push(t0);
 
     tracker.update(plates);
     renderLabels();
 
+    const seen = visibleTracks().length > 0;
+    if (seen) lastPlateAt = t0;
+    updateLiveStatus();
     const ms = performance.now() - t0;
-    avgMs = avgMs ? avgMs * 0.8 + ms * 0.2 : ms;
-    if (!paused) {
-      const n = visibleTracks().length;
-      const rate = avgMs < 1000 ? `每秒 ${(1000 / avgMs).toFixed(1)} 次` : `每 ${(avgMs / 1000).toFixed(1)} 秒一次`;
-      const mode = useFast() ? `${getBackend()}・快速` : getBackend();
-      setStatus(`${n ? `畫面中 ${n} 個車牌` : '對準車牌，保持手機穩定…'}｜${rate}（${mode}）｜第 ${frameCount} 張`);
-    }
-    await sleep(Math.max(0, MIN_INTERVAL_MS - ms));
+    await sleep(Math.max(0, (seen ? ACTIVE_INTERVAL_MS : IDLE_INTERVAL_MS) - ms));
   }
+}
+
+function updateLiveStatus() {
+  if (paused) return;
+  const now = performance.now();
+  while (inferTimes.length && now - inferTimes[0] > 3000) inferTimes.shift();
+  const n = visibleTracks().length;
+  const rate = `每秒 ${(inferTimes.length / 3).toFixed(1)} 次`;
+  const mode = useFast() ? `${getBackend()}・快速` : getBackend();
+  setStatus(`${n ? `畫面中 ${n} 個車牌` : '對準車牌，保持手機穩定…'}｜${saving ? '畫面沒變，省電中' : rate}（${mode}）｜第 ${frameCount} 張`);
+}
+
+// 用很小的縮圖（32×24 灰階）判斷畫面有沒有變，幾乎不耗電
+const thumbCtx = Object.assign(document.createElement('canvas'), { width: 32, height: 24 })
+  .getContext('2d', { willReadFrequently: true });
+
+function sampleThumb(video) {
+  thumbCtx.drawImage(video, 0, 0, 32, 24);
+  const d = thumbCtx.getImageData(0, 0, 32, 24).data;
+  const g = new Uint8Array(32 * 24);
+  for (let i = 0; i < g.length; i++) g[i] = (d[i * 4] * 3 + d[i * 4 + 1] * 6 + d[i * 4 + 2]) / 10;
+  return g;
+}
+
+/** 有明顯變化的像素比例。不用平均差異：車子移動時只有邊緣會變，平均下來差異很小 */
+function changedRatio(a, b) {
+  let changed = 0;
+  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > PIXEL_CHANGE) changed++;
+  return changed / a.length;
 }
 
 /** 用 CPU 時使用快速偵測模型；GPU 中途出錯改用 CPU 時，在背景下載快速模型 */
