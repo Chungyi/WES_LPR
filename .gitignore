@@ -9,3 +9,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 node_modules/
+
+# 本機測試用圖片（可能含真實車牌），不可進入程式庫
+test-local/

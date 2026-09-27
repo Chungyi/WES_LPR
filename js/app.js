@@ -4,30 +4,15 @@ import { initAuth, renderSignInButton, getValidToken, decodeJwt, signOut } from 
 import { downloadPlates } from './api.js';
 import { loadDataset, saveDataset, clearAll, remainingMs, isExpired } from './store.js';
 import { PlateIndex, normalizePlate } from './match.js';
+import { $, h, typeBadge, renderResult, setOwnerHandler, toast } from './ui.js';
+import { initPhoto } from './photo.js';
 
-const $ = (id) => document.getElementById(id);
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-const MAX_LIST = 20; // 只輸入數字時，最多列出幾筆
 
 let dataset = null;
 let index = null;
 let busy = false;
-
-/** 建立元素；文字一律用 textContent，避免試算表內容被當成 HTML */
-function h(tag, props = {}, ...children) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (k === 'class') el.className = v;
-    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else el.setAttribute(k, v);
-  }
-  for (const c of children.flat()) {
-    if (c == null || c === false) continue;
-    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
-  }
-  return el;
-}
 
 // ---------- 畫面切換 ----------
 
@@ -52,15 +37,6 @@ function setStatus(el, message, type = 'info') {
   el.dataset.type = type;
 }
 
-let toastTimer;
-function toast(message) {
-  const el = $('toast');
-  el.textContent = message;
-  el.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), 2500);
-}
-
 function formatTime(ts) {
   const d = new Date(ts);
   const pad = (n) => String(n).padStart(2, '0');
@@ -81,6 +57,8 @@ function updateDataStatus() {
   $('expired-banner').hidden = !expired;
   $('search-input').disabled = expired;
   $('search-form').querySelector('button').disabled = expired;
+  $('btn-photo-camera').disabled = expired;
+  $('btn-photo-album').disabled = expired;
   if (expired) $('results').replaceChildren();
 }
 
@@ -154,44 +132,7 @@ function runSearch() {
   const results = $('results');
   if (!normalizePlate(query)) return results.replaceChildren();
 
-  const r = index.search(query);
-  if (r.kind === 'exact') {
-    results.replaceChildren(...r.records.map((rec) => plateCard(rec, 'found')));
-  } else if (r.kind === 'digits' || r.kind === 'partial') {
-    const q = normalizePlate(query);
-    const shown = r.records.slice(0, MAX_LIST);
-    const hint = r.kind === 'digits'
-      ? `數字「${q}」符合 ${r.records.length} 筆：`
-      : `沒有數字完全相同的車牌，包含「${q}」的有 ${r.records.length} 筆：`;
-    results.replaceChildren(
-      h('p', { class: r.kind === 'digits' ? 'hint hint-info' : 'hint' }, hint),
-      ...shown.map((rec) => plateCard(rec, r.kind === 'digits' ? 'found' : 'candidate'))
-    );
-    if (r.records.length > MAX_LIST) {
-      results.append(h('p', { class: 'hint' }, `還有 ${r.records.length - MAX_LIST} 筆未顯示，請輸入更多數字或加上英文字母。`));
-    }
-  } else if (r.kind === 'fuzzy') {
-    results.replaceChildren(
-      h('p', { class: 'hint' }, `查無「${query.trim()}」，您要找的是不是：`),
-      ...r.candidates.map((c) => plateCard(c.record, 'candidate'))
-    );
-  } else {
-    results.replaceChildren(
-      h('div', { class: 'notfound' }, h('strong', {}, '查無資料'), h('span', {}, query.trim().toUpperCase()))
-    );
-  }
-}
-
-function typeBadge(type) {
-  return h('span', { class: 'badge ' + (type === '機車' ? 'badge-moto' : 'badge-car') }, type || '未分類');
-}
-
-function plateCard(rec, kind) {
-  return h('article', { class: 'card card-' + kind },
-    h('div', { class: 'card-top' }, h('span', { class: 'plate' }, rec.plate), typeBadge(rec.type)),
-    h('div', { class: 'owner-line' }, [rec.unit, rec.title].filter(Boolean).join('｜')),
-    h('button', { type: 'button', class: 'name-link', onclick: () => openOwner(rec) }, rec.name || '（未填姓名）', h('span', { 'aria-hidden': 'true' }, ' ›'))
-  );
+  renderResult(results, query, index.search(query));
 }
 
 // ---------- 車主資訊卡 ----------
@@ -221,6 +162,14 @@ function openOwner(rec) {
 // ---------- 啟動 ----------
 
 function bindEvents() {
+  setOwnerHandler(openOwner);
+  initPhoto({
+    getIndex: () => index,
+    isUsable: () => !!index && !isExpired(dataset),
+    showView,
+    showMain,
+    openOwner,
+  });
   $('btn-download').addEventListener('click', onDownloadClick);
   $('btn-logout').addEventListener('click', onLogout);
   $('search-form').addEventListener('submit', (e) => {

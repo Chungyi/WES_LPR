@@ -63,11 +63,42 @@
       <div id="results" class="results" aria-live="polite"></div>
 
       <nav class="modes" aria-label="辨識模式">
-        <button type="button" class="mode" disabled>📷 拍照辨識<small>第 2 階段開放</small></button>
+        <button id="btn-photo-camera" type="button" class="mode mode-on">📷 拍照辨識<small>用相機拍車牌</small></button>
+        <button id="btn-photo-album" type="button" class="mode mode-on">🖼️ 相簿辨識<small>選已拍好的照片</small></button>
         <button type="button" class="mode" disabled>🎥 即時辨識<small>第 3 階段開放</small></button>
       </nav>
     </main>
   </section>
+
+  <!-- 拍照辨識 -->
+  <section id="view-photo" class="view" hidden>
+    <header class="topbar">
+      <button id="btn-photo-back" type="button" class="btn-text">‹ 返回</button>
+      <h1>拍照辨識</h1>
+      <span class="topbar-spacer"></span>
+    </header>
+    <main class="content">
+      <div id="photo-stage" class="stage">
+        <canvas id="photo-canvas"></canvas>
+        <div id="photo-overlay" class="overlay"></div>
+        <div id="photo-busy" class="busy" hidden>
+          <div class="spinner"></div>
+          <p id="photo-busy-text"></p>
+        </div>
+      </div>
+      <p id="photo-summary" class="status" role="status"></p>
+      <div class="photo-actions">
+        <button id="btn-retake" type="button" class="btn">📷 重拍</button>
+        <button id="btn-album2" type="button" class="btn">🖼️ 相簿</button>
+        <button id="btn-mark" type="button" class="btn">✏️ 框選車牌</button>
+      </div>
+      <div id="photo-results" class="photo-results"></div>
+    </main>
+  </section>
+
+  <!-- 照片來源：相機、相簿（照片只在手機上處理，不會上傳） -->
+  <input id="file-camera" type="file" accept="image/*" capture="environment" hidden>
+  <input id="file-album" type="file" accept="image/*" hidden>
 
   <!-- 車主資訊卡 -->
   <dialog id="dlg-owner" class="sheet"></dialog>
