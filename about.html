@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>校園車牌辨識查詢系統｜系統說明</title>
+  <meta name="description" content="華盛頓雙語小學校園車牌辨識查詢系統：AI 在手機上辨識車牌、比對名單，用於校園違規停車查詢。">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --blue: #2563eb;
+      --blue-soft: #eff6ff;
+      --orange: #f59e0b;
+      --orange-soft: #fff7ed;
+      --red: #e11d48;
+      --red-soft: #fff1f2;
+      --green: #16a34a;
+      --green-soft: #f0fdf4;
+      --purple: #7c3aed;
+      --purple-soft: #f5f3ff;
+      --teal: #0d9488;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+      line-height: 1.7;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 32px 16px 48px; }
+
+    /* ---------- 標題 ---------- */
+    .hero { text-align: center; padding: 16px 0 28px; }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(28px, 5vw, 44px);
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      background: linear-gradient(90deg, #1d4ed8, #2563eb 45%, #0ea5e9);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero p { max-width: 720px; margin: 12px auto 0; color: var(--muted); font-size: 17px; }
+    .hero .cta { display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 20px; }
+    .btn {
+      display: inline-block;
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-weight: 700;
+      text-decoration: none;
+      border: 2px solid var(--blue);
+    }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-ghost { color: var(--blue); background: #fff; }
+
+    /* ---------- 卡片與區塊標題 ---------- */
+    .card {
+      background: var(--card);
+      border-radius: 18px;
+      padding: 26px 24px;
+      box-shadow: 0 4px 18px rgb(15 23 42 / 0.06);
+      margin-bottom: 22px;
+    }
+    .card h2 {
+      display: inline-block;
+      margin: 0 0 14px;
+      padding-bottom: 6px;
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--blue);
+      border-bottom: 4px solid var(--orange);
+    }
+    .card > p.lead { margin: 0 0 18px; color: #334155; }
+    .grid-2 { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.5fr); gap: 22px; }
+    .grid-2 > .card { margin-bottom: 0; }
+    .row { margin-bottom: 22px; }
+    @media (max-width: 820px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+
+    /* ---------- 核心價值數字卡 ---------- */
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    @media (max-width: 820px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .stat { border-radius: 14px; padding: 18px 12px; text-align: center; }
+    .stat b { display: block; font-size: clamp(24px, 3.6vw, 34px); font-weight: 900; line-height: 1.2; }
+    .stat strong { display: block; margin-top: 6px; font-size: 15px; }
+    .stat span { display: block; color: var(--muted); font-size: 13px; }
+    .s-blue { background: var(--blue-soft); color: var(--blue); }
+    .s-orange { background: var(--orange-soft); color: #ea580c; }
+    .s-red { background: var(--red-soft); color: var(--red); }
+    .s-green { background: var(--green-soft); color: var(--green); }
+    .stat strong, .stat span { color: var(--text); }
+    .stat span { color: var(--muted); }
+
+    /* ---------- 圓環圖 ---------- */
+    .donut-wrap { display: flex; align-items: center; gap: 16px; margin: 8px 0 4px; }
+    .donut { flex: none; width: 150px; }
+    .legend { flex: 1; min-width: 0; list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; line-height: 1.5; }
+    @media (max-width: 420px) { .donut-wrap { flex-direction: column; } .legend { width: 100%; } }
+    .legend li { display: flex; align-items: center; gap: 8px; }
+    .legend i { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+    .legend em { margin-left: auto; padding-left: 6px; font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .note { color: var(--muted); font-size: 13px; margin: 0; }
+    ul.tech { margin: 12px 0 0; padding-left: 20px; font-size: 14px; }
+    ul.tech li { margin: 2px 0; }
+
+    /* ---------- 角色 ---------- */
+    .roles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    @media (max-width: 600px) { .roles { grid-template-columns: minmax(0, 1fr); } }
+    .role-head { border-radius: 12px; padding: 12px 8px; text-align: center; color: #fff; }
+    .role-head b { display: block; font-size: 18px; }
+    .role-head small { font-size: 13px; opacity: 0.95; }
+    .r-red { background: var(--red); }
+    .r-orange { background: var(--orange); }
+    .r-blue { background: var(--blue); }
+    .role ul { margin: 10px 0 0; padding-left: 18px; font-size: 14px; color: #334155; }
+
+    .flow { margin-top: 20px; padding: 16px; border-radius: 14px; background: #f8fafc; }
+    .flow h3 { margin: 0 0 10px; font-size: 16px; }
+    .steps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .step {
+      flex: 1 1 110px;
+      padding: 10px 8px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .arrow { color: var(--muted); font-weight: 700; }
+    @media (max-width: 600px) { .arrow { display: none; } }
+
+    /* ---------- 資料結構 ---------- */
+    .tables { display: grid; gap: 14px; }
+    .tbl { border-left: 5px solid var(--blue); padding: 4px 0 4px 12px; }
+    .tbl b { display: block; font-size: 16px; }
+    .tbl span { color: var(--muted); font-size: 13px; }
+    .t-orange { border-color: var(--orange); }
+    .t-green { border-color: var(--green); }
+    .tag { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 999px; background: var(--red-soft); color: var(--red); font-size: 12px; font-weight: 700; }
+
+    /* ---------- 長條圖 ---------- */
+    .charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; }
+    @media (max-width: 700px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+    .chart h3 { margin: 0 0 10px; font-size: 15px; text-align: center; }
+    .bars { display: grid; gap: 10px; }
+    .bar-label { display: flex; justify-content: space-between; font-size: 13px; }
+    .bar-label em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .bar { height: 14px; border-radius: 999px; background: #f1f5f9; overflow: hidden; }
+    .bar i { display: block; height: 100%; border-radius: 999px; }
+
+    /* ---------- 亮點功能 ---------- */
+    .features { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    @media (max-width: 900px) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .feature { border: 1px solid var(--line); border-radius: 14px; padding: 16px 12px; text-align: center; background: #fff; }
+    .feature .ico { font-size: 28px; line-height: 1; }
+    .feature b { display: block; margin: 8px 0 4px; color: var(--blue); }
+    .feature span { display: block; color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+    /* ---------- 隱私 ---------- */
+    .privacy { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    @media (max-width: 820px) { .privacy { grid-template-columns: minmax(0, 1fr); } }
+    .privacy div { padding: 12px 14px; border-radius: 12px; background: var(--green-soft); font-size: 14px; }
+    .privacy b { display: block; color: var(--green); }
+
+    /* ---------- 使用步驟 ---------- */
+    ol.howto { margin: 0; padding-left: 22px; }
+    ol.howto li { margin: 6px 0; }
+    ol.howto b { color: var(--blue); }
+
+    footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 8px; }
+    footer a { color: var(--blue); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>校園車牌辨識查詢系統</h1>
+    <p>為校園違規停車查詢設計的手機網頁。AI 直接在手機上辨識車牌、比對名單，拍照或鏡頭一對準，就能知道車主的單位、職稱與姓名，並一鍵撥打電話。</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://chungyi.github.io/WES_LPR/" target="_blank" rel="noopener">開啟系統</a>
+      <a class="btn btn-ghost" href="#howto">使用步驟</a>
+    </div>
+  </header>
+
+  <!-- 核心價值 -->
+  <section class="card">
+    <h2>系統核心價值</h2>
+    <p class="lead">過去查詢違規停車，需要抄下車牌再回辦公室翻名冊。本系統把名單下載到手機，AI 在手機上即時辨識車牌、立即比對，現場就能找到車主並聯絡。照片不上傳、名單定期失效，兼顧效率與個資保護。</p>
+    <div class="stats">
+      <div class="stat s-blue"><b>本機 AI</b><strong>照片不上傳</strong><span>辨識全部在手機上完成</span></div>
+      <div class="stat s-orange"><b>3 種</b><strong>查詢方式</strong><span>手動輸入、拍照、即時辨識</span></div>
+      <div class="stat s-red"><b>每秒 4 次</b><strong>即時辨識</strong><span>iPhone、Android 實測</span></div>
+      <div class="stat s-green"><b>7 天</b><strong>名單自動失效</strong><span>登出時立即清除</span></div>
+    </div>
+  </section>
+
+  <!-- 技術架構 ＋ 流程 -->
+  <div class="grid-2 row">
+    <section class="card">
+      <h2>技術架構組成</h2>
+      <p class="note">iPhone 第一次使用時需下載的內容（約 24 MB，之後存在手機上，不再重複下載）</p>
+      <!-- 圓環：r=15.915 時周長為 100，dasharray 直接用百分比 -->
+      <div class="donut-wrap">
+      <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="下載內容組成圓環圖">
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#f1f5f9" stroke-width="7"/>
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#2563eb" stroke-width="7" stroke-dasharray="32.6 67.4" stroke-dashoffset="25"/>
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#f59e0b" stroke-width="7" stroke-dasharray="32.3 67.7" stroke-dashoffset="-7.6"/>
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#10b981" stroke-width="7" stroke-dasharray="21.9 78.1" stroke-dashoffset="-39.9"/>
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#e11d48" stroke-width="7" stroke-dasharray="12.8 87.2" stroke-dashoffset="-61.8"/>
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#7c3aed" stroke-width="7" stroke-dasharray="0.8 99.2" stroke-dashoffset="-74.6"/>
+        <text x="21" y="20.5" text-anchor="middle" font-size="5" font-weight="900" fill="#1e293b">24 MB</text>
+        <text x="21" y="25.5" text-anchor="middle" font-size="2.6" fill="#64748b">首次下載</text>
+      </svg>
+      <ul class="legend">
+        <li><i style="background:#2563eb"></i>車牌偵測模型（拍照用）<em>7.8 MB</em></li>
+        <li><i style="background:#f59e0b"></i>快速偵測模型（iPhone 即時用）<em>7.8 MB</em></li>
+        <li><i style="background:#10b981"></i>車牌文字辨識模型<em>5.3 MB</em></li>
+        <li><i style="background:#e11d48"></i>AI 執行程式（onnxruntime）<em>3.1 MB</em></li>
+        <li><i style="background:#7c3aed"></i>網頁程式本身<em>0.1 MB</em></li>
+      </ul>
+      </div>
+      <ul class="tech">
+        <li><b>前端：</b>HTML、CSS、JavaScript（PWA，可加入主畫面）</li>
+        <li><b>AI 引擎：</b>onnxruntime-web（CPU／GPU 自動選擇）</li>
+        <li><b>AI 模型：</b>YOLOv9 車牌偵測＋fast-plate-ocr 文字辨識</li>
+        <li><b>登入：</b>Google 帳號（限 @wes.tc.edu.tw）</li>
+        <li><b>後端：</b>Google Apps Script</li>
+        <li><b>資料：</b>Google 試算表</li>
+        <li><b>網站：</b>GitHub Pages（HTTPS）</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>使用者流程與權限</h2>
+      <p class="lead">系統只有兩種人需要操作；只有列在「授權登入名單」上的學校帳號可以使用。</p>
+      <div class="roles">
+        <div class="role">
+          <div class="role-head r-red"><b>系統管理者</b><small>維護名單／授權</small></div>
+          <ul>
+            <li>在試算表維護車牌名單</li>
+            <li>設定授權登入名單</li>
+            <li>查看下載紀錄</li>
+          </ul>
+        </div>
+        <div class="role">
+          <div class="role-head r-orange"><b>查詢人員</b><small>警衛／學務處／交通處</small></div>
+          <ul>
+            <li>學校帳號登入</li>
+            <li>下載名單到手機</li>
+            <li>辨識車牌、聯絡車主</li>
+          </ul>
+        </div>
+        <div class="role">
+          <div class="role-head r-blue"><b>後端服務</b><small>Apps Script</small></div>
+          <ul>
+            <li>驗證 Google 登入憑證</li>
+            <li>檢查授權名單</li>
+            <li>記錄每次下載</li>
+          </ul>
+        </div>
+      </div>
+      <div class="flow">
+        <h3>查詢流程示意：</h3>
+        <div class="steps">
+          <div class="step">1. 學校帳號登入</div><span class="arrow">→</span>
+          <div class="step">2. 下載名單到手機</div><span class="arrow">→</span>
+          <div class="step">3. 拍照或即時辨識</div><span class="arrow">→</span>
+          <div class="step">4. 顯示單位／姓名</div><span class="arrow">→</span>
+          <div class="step">5. 點姓名撥打電話</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 資料結構 ＋ 實測數據 -->
+  <div class="grid-2 row">
+    <section class="card">
+      <h2>資料結構</h2>
+      <p class="lead">資料存放在學校 Google Workspace 的試算表，試算表不分享給任何人，只能透過後端讀取。</p>
+      <div class="tables">
+        <div class="tbl"><b>車牌名單</b><span>車牌號碼、汽機車、單位、職稱、姓名、行動電話、Email<span class="tag">Email 不下載到手機</span></span></div>
+        <div class="tbl t-orange"><b>授權登入名單</b><span>Email、姓名、備註（只有列在這裡的帳號可以登入）</span></div>
+        <div class="tbl t-green"><b>下載紀錄</b><span>時間、Email、結果、筆數、裝置（系統自動寫入）</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>實測數據</h2>
+      <p class="lead">以下數據為開發期間的實際量測結果。</p>
+      <div class="charts">
+        <div class="chart">
+          <h3>即時辨識速度（每秒次數，手機實測）</h3>
+          <div class="bars">
+            <div><div class="bar-label">Galaxy S23+（GPU）<em>4.5</em></div><div class="bar"><i style="width:90%;background:#2563eb"></i></div></div>
+            <div><div class="bar-label">iPhone 17e（CPU・快速模型）<em>4.0</em></div><div class="bar"><i style="width:80%;background:#f59e0b"></i></div></div>
+            <div><div class="bar-label">iPhone 17e（CPU・一般模型）<em>約 1.8</em></div><div class="bar"><i style="width:36%;background:#94a3b8"></i></div></div>
+          </div>
+          <p class="note" style="margin-top:8px">iPhone 改用快速模型後，速度約提升 2 倍。</p>
+        </div>
+        <div class="chart">
+          <h3>省電效果（對著靜止車牌 4 秒內的辨識次數）</h3>
+          <div class="bars">
+            <div><div class="bar-label">省電前<em>約 20 次</em></div><div class="bar"><i style="width:100%;background:#e11d48"></i></div></div>
+            <div><div class="bar-label">省電後<em>3 次</em></div><div class="bar"><i style="width:15%;background:#16a34a"></i></div></div>
+          </div>
+          <p class="note" style="margin-top:8px">畫面沒變時沿用上次結果，運算量約減少 85%，降低手機發燙。</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 亮點功能 -->
+  <section class="card">
+    <h2>系統亮點功能</h2>
+    <div class="features">
+      <div class="feature"><div class="ico">🔐</div><b>學校帳號登入</b><span>限 @wes.tc.edu.tw，且須在授權名單中</span></div>
+      <div class="feature"><div class="ico">🎥</div><b>即時辨識</b><span>鏡頭對準即辨識，一次可辨識多台車</span></div>
+      <div class="feature"><div class="ico">📷</div><b>拍照辨識</b><span>拍照或選相簿照片，漏抓的車牌可手動框選</span></div>
+      <div class="feature"><div class="ico">🔢</div><b>只輸入數字也能查</b><span>輸入 1234 即列出 ABC-1234 等車牌</span></div>
+      <div class="feature"><div class="ico">🧩</div><b>容錯比對</b><span>0／O、8／B 等易混淆字元自動列出候選</span></div>
+      <div class="feature"><div class="ico">📞</div><b>一鍵撥號</b><span>點車主姓名即可撥打行動電話</span></div>
+      <div class="feature"><div class="ico">📴</div><b>離線比對</b><span>名單存在手機上，比對不需連網</span></div>
+      <div class="feature"><div class="ico">🔋</div><b>省電模式</b><span>畫面沒變不重算，30 秒沒看到車牌自動暫停</span></div>
+    </div>
+  </section>
+
+  <!-- 隱私與資安 -->
+  <section class="card">
+    <h2>隱私與資安</h2>
+    <div class="privacy">
+      <div><b>照片不上傳</b>拍照與即時辨識全程在手機上處理，不上傳、不另存。</div>
+      <div><b>最少資料原則</b>下載到手機的名單不含 Email，只有查詢需要的欄位。</div>
+      <div><b>名單定期失效</b>下載 7 天後自動失效；登出或被取消授權時立即清除。</div>
+      <div><b>試算表不公開</b>試算表不分享給任何人，只能經後端驗證後讀取。</div>
+      <div><b>雙重驗證</b>Google 登入限學校網域，再比對授權登入名單。</div>
+      <div><b>下載留紀錄</b>每次下載（含被拒絕的嘗試）都會記錄在試算表。</div>
+    </div>
+  </section>
+
+  <!-- 使用步驟 -->
+  <section class="card" id="howto">
+    <h2>使用步驟</h2>
+    <ol class="howto">
+      <li>用手機的 Chrome 或 Safari 開啟 <a href="https://chungyi.github.io/WES_LPR/" target="_blank" rel="noopener">chungyi.github.io/WES_LPR</a>，建議「加入主畫面」。</li>
+      <li>以<b>學校 Google 帳號</b>登入，系統會自動下載車牌名單。</li>
+      <li>查詢方式三選一：<b>輸入車牌</b>（可只輸入數字）、<b>📷 拍照辨識</b>、<b>🎥 即時辨識</b>。</li>
+      <li>綠色標籤代表查到車主，<b>點姓名</b>即可撥打電話；黃色為「可能是」，紅色為「查無資料」。</li>
+      <li>名單 7 天後失效，按「<b>資料下載</b>」即可更新為最新名單。</li>
+      <li>使用完畢建議按「<b>登出</b>」，手機上的名單會一併清除。</li>
+    </ol>
+    <p class="note" style="margin-top:12px">第一次使用拍照或即時辨識時需下載 AI 模型（約 18～24 MB），建議在 Wi-Fi 環境下進行。</p>
+  </section>
+
+  <footer>
+    華盛頓雙語小學｜校園車牌辨識查詢系統｜<a href="https://chungyi.github.io/WES_LPR/" target="_blank" rel="noopener">開啟系統</a>
+  </footer>
+</div>
+</body>
+</html>
