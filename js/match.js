@@ -5,6 +5,7 @@ const CONFUSABLE_GROUPS = ['0ODQ', '1I7', '8B', '5S', '2Z', '6G'];
 const CONFUSABLE_COST = 0.3;
 const MAX_DISTANCE = 1.5;
 const MAX_CANDIDATES = 3;
+const MIN_PARTIAL_DIGITS = 3;
 
 const groupOf = new Map();
 CONFUSABLE_GROUPS.forEach((g, i) => [...g].forEach((ch) => groupOf.set(ch, i)));
@@ -50,6 +51,8 @@ export class PlateIndex {
   /**
    * 查詢車牌，回傳：
    *   { kind: 'exact', records }             完全相符
+   *   { kind: 'digits', records }            只輸入數字，數字部分完全相同的車牌
+   *   { kind: 'partial', records }           只輸入數字，數字部分包含輸入內容的車牌
    *   { kind: 'fuzzy', candidates: [...] }   相近候選（依相似度排序）
    *   { kind: 'none' }                       查無資料
    */
@@ -60,6 +63,8 @@ export class PlateIndex {
     const exact = this.byKey.get(key);
     if (exact) return { kind: 'exact', records: exact };
 
+    if (/^\d+$/.test(key)) return this.searchDigits(key);
+
     const candidates = [];
     for (const [k, recs] of this.byKey) {
       if (Math.abs(k.length - key.length) > 1) continue;
@@ -69,6 +74,24 @@ export class PlateIndex {
     if (!candidates.length) return { kind: 'none' };
     candidates.sort((a, b) => a.distance - b.distance || a.record.plate.localeCompare(b.record.plate));
     return { kind: 'fuzzy', candidates: candidates.slice(0, MAX_CANDIDATES) };
+  }
+
+  /**
+   * 只輸入數字時：先找數字部分完全相同的車牌（1234 → ABC-1234、1234-AB）；
+   * 找不到且輸入至少 3 碼時，再找數字部分包含輸入內容的車牌（234 → ABC-1234）。
+   */
+  searchDigits(digits) {
+    const equal = [];
+    const partial = [];
+    for (const [k, recs] of this.byKey) {
+      const plateDigits = k.replace(/[A-Z]/g, '');
+      if (plateDigits === digits) equal.push(...recs);
+      else if (digits.length >= MIN_PARTIAL_DIGITS && plateDigits.includes(digits)) partial.push(...recs);
+    }
+    const byPlate = (a, b) => a.plate.localeCompare(b.plate);
+    if (equal.length) return { kind: 'digits', records: equal.sort(byPlate) };
+    if (partial.length) return { kind: 'partial', records: partial.sort(byPlate) };
+    return { kind: 'none' };
   }
 
   /** 同一位車主（姓名＋電話相同）名下的其他車牌 */

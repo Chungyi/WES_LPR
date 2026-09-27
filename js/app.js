@@ -8,6 +8,7 @@ import { PlateIndex, normalizePlate } from './match.js';
 const $ = (id) => document.getElementById(id);
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+const MAX_LIST = 20; // 只輸入數字時，最多列出幾筆
 
 let dataset = null;
 let index = null;
@@ -156,6 +157,19 @@ function runSearch() {
   const r = index.search(query);
   if (r.kind === 'exact') {
     results.replaceChildren(...r.records.map((rec) => plateCard(rec, 'found')));
+  } else if (r.kind === 'digits' || r.kind === 'partial') {
+    const q = normalizePlate(query);
+    const shown = r.records.slice(0, MAX_LIST);
+    const hint = r.kind === 'digits'
+      ? `數字「${q}」符合 ${r.records.length} 筆：`
+      : `沒有數字完全相同的車牌，包含「${q}」的有 ${r.records.length} 筆：`;
+    results.replaceChildren(
+      h('p', { class: r.kind === 'digits' ? 'hint hint-info' : 'hint' }, hint),
+      ...shown.map((rec) => plateCard(rec, r.kind === 'digits' ? 'found' : 'candidate'))
+    );
+    if (r.records.length > MAX_LIST) {
+      results.append(h('p', { class: 'hint' }, `還有 ${r.records.length - MAX_LIST} 筆未顯示，請輸入更多數字或加上英文字母。`));
+    }
   } else if (r.kind === 'fuzzy') {
     results.replaceChildren(
       h('p', { class: 'hint' }, `查無「${query.trim()}」，您要找的是不是：`),
