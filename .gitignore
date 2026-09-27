@@ -1,0 +1,11 @@
+# 名單資料絕對不可以進入程式庫
+*.csv
+*.xlsx
+*.xls
+data/
+
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+node_modules/
