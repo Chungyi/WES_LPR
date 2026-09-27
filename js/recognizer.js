@@ -33,7 +33,34 @@ let loading = null;
 let backend = 'CPU';
 let detModelBytes = null; // 保留偵測模型，GPU 出問題時用來改建 CPU 版
 let detInput = null;      // 偵測模型的輸入資料，重複使用（每張約 4.9 MB）
-let preferCpu = false;
+
+// ---------- 使用 GPU 或 CPU ----------
+// iPhone（WebKit）的 GPU 運算長時間執行會用光記憶體，網頁被系統關掉（實測 2 分鐘內），
+// 所以 iPhone 預設用 CPU；Android 用 GPU。
+// 網址加 ?cpu=1 強制 CPU、?gpu=1 強制 GPU、?auto=1 恢復預設，設定會記在這支手機上。
+const BACKEND_KEY = 'wes-lpr-backend';
+
+function isIOS() {
+  const ua = navigator.userAgent;
+  // iPadOS 會偽裝成 Mac，用觸控點數分辨
+  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+
+function readSetting() {
+  try {
+    const param = new URLSearchParams(location.search);
+    if (param.has('cpu')) localStorage.setItem(BACKEND_KEY, 'cpu');
+    else if (param.has('gpu')) localStorage.setItem(BACKEND_KEY, 'gpu');
+    else if (param.has('auto')) localStorage.removeItem(BACKEND_KEY);
+    localStorage.removeItem('wes-lpr-live-cpu'); // 舊版設定，已由 BACKEND_KEY 取代
+    return localStorage.getItem(BACKEND_KEY);
+  } catch {
+    return null;
+  }
+}
+
+const setting = readSetting();
+let preferCpu = setting === 'cpu' || (setting !== 'gpu' && isIOS());
 
 const progressListeners = new Set();
 let lastProgress = 0;
@@ -46,8 +73,13 @@ export function modelsReady() {
  * 指定只用 CPU（iPhone 上 GPU 長時間執行可能讓網頁記憶體不足而被系統重新載入）。
  * 模型已經用 GPU 載入時，會立刻改建成 CPU 版。
  */
-export async function setPreferCpu(on) {
+export async function setPreferCpu(on, { remember = false } = {}) {
   preferCpu = on;
+  if (remember) {
+    try {
+      localStorage.setItem(BACKEND_KEY, on ? 'cpu' : 'gpu');
+    } catch {}
+  }
   if (on && detector && backend === 'GPU') await switchToCpu();
 }
 

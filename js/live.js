@@ -6,10 +6,9 @@ import { PlateTracker } from './tracker.js';
 
 const MIN_INTERVAL_MS = 60;  // 兩次辨識之間至少間隔，讓畫面保持流暢、手機不會太燙
 
-// 即時辨識進行中的標記：網頁若在辨識中被系統重新載入（記憶體不足），下次會看到這個標記，
-// 自動改用 CPU。網址加 ?cpu=1 強制用 CPU、?gpu=1 恢復用 GPU。
+// 即時辨識進行中的標記：網頁若在辨識中被系統關掉（記憶體不足），下次會看到這個標記，
+// 自動改用 CPU 並記在這支手機上（使用 GPU 或 CPU 的預設規則見 recognizer.js）。
 const RUNNING_KEY = 'wes-lpr-live-running';
-const CPU_KEY = 'wes-lpr-live-cpu';
 
 let deps = null;     // 由 app.js 提供：getIndex, isUsable, showView, showMain, openOwner
 let stream = null;
@@ -42,14 +41,11 @@ export function initLive(d) {
   });
   window.addEventListener('resize', () => active && layoutLabels());
 
-  const param = new URLSearchParams(location.search);
-  if (param.has('gpu')) storage('remove', CPU_KEY);
-  if (param.has('cpu')) storage('set', CPU_KEY, '1');
   if (storage('get', RUNNING_KEY)) {
-    // 上次即時辨識時網頁被重新載入，很可能是記憶體不足：改用 CPU
+    // 上次即時辨識時網頁被系統關掉，很可能是記憶體不足：改用 CPU
     storage('remove', RUNNING_KEY);
-    storage('set', CPU_KEY, '1');
-    crashNotice = true;
+    // 使用者這次明確用 ?gpu=1 開啟時，尊重使用者的選擇
+    crashNotice = !new URLSearchParams(location.search).has('gpu');
   }
 }
 
@@ -71,9 +67,9 @@ async function open() {
   deps.showView('view-live');
   updatePauseButton();
   clearLabels();
-  if (storage('get', CPU_KEY)) await setPreferCpu(true);
   if (crashNotice) {
     crashNotice = false;
+    await setPreferCpu(true, { remember: true });
     toast('上次即時辨識時網頁記憶體不足，已改用 CPU 模式');
   }
   loadModels().catch(() => {});
