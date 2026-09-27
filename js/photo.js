@@ -63,7 +63,7 @@ async function onPhoto(file) {
     view.getContext('2d').drawImage(photo, 0, 0);
 
     if (!modelsReady()) {
-      await loadModels((p) => setBusy(`下載 AI 模型… ${Math.round(p * 100)}%\n（第一次使用需要下載，之後不用）`));
+      await loadModels((p) => setBusy(p < 1 ? `下載 AI 模型… ${Math.round(p * 100)}%\n（第一次使用需要下載，之後不用）` : '準備 AI 模型中…'));
     }
     setBusy('辨識中…');
     await nextFrame();

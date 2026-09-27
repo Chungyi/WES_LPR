@@ -5,8 +5,8 @@ const DEFAULTS = {
   iouThreshold: 0.2,   // 框的重疊比例超過這個值，視為同一個車牌
   maxAgeMs: 1500,      // 超過這個時間沒再看到，就移除
   minHits: 2,          // 至少看到幾次才顯示（單次信心很高時例外）
-  instantConfidence: 0.9,
-  smoothing: 0.6,      // 新位置的權重，讓框移動比較平順
+  instantConfidence: 0.8, // 單次信心達到這個值就立刻顯示
+  smoothing: 0.7,      // 新位置的權重：越大框跟得越緊，越小移動越平順
 };
 
 export function iou(a, b) {
@@ -96,10 +96,10 @@ export class PlateTracker {
     t.confidence = bestVotes / t.hits;
   }
 
-  /** 可以顯示在畫面上的車牌 */
-  visible() {
+  /** 可以顯示在畫面上的車牌；showNow(track) 為 true 的也立刻顯示（例如名單中完全相符的車牌） */
+  visible(showNow) {
     return this.tracks.filter(
-      (t) => t.hits >= this.opt.minHits || t.lastConfidence >= this.opt.instantConfidence
+      (t) => t.hits >= this.opt.minHits || t.lastConfidence >= this.opt.instantConfidence || showNow?.(t)
     );
   }
 }

@@ -1,11 +1,11 @@
 // 即時辨識畫面：開啟相機，持續辨識畫面中的車牌，在車牌上方疊加結果標籤
 
 import { $, h, renderResult, toast } from './ui.js';
-import { loadModels, modelsReady, recognizePlates } from './recognizer.js';
+import { loadModels, modelsReady, recognizePlates, getBackend } from './recognizer.js';
 import { PlateTracker } from './tracker.js';
 
 const MAX_FRAME_SIDE = 1920; // 送去辨識的畫面最長邊
-const MIN_INTERVAL_MS = 150; // 兩次辨識之間至少間隔，讓畫面保持流暢、手機不會太燙
+const MIN_INTERVAL_MS = 60;  // 兩次辨識之間至少間隔，讓畫面保持流暢、手機不會太燙
 
 let deps = null;     // 由 app.js 提供：getIndex, isUsable, showView, showMain, openOwner
 let stream = null;
@@ -89,7 +89,7 @@ async function startCamera() {
   if (!modelsReady()) {
     setBusy(true);
     try {
-      await loadModels((p) => setStatus(`下載 AI 模型… ${Math.round(p * 100)}%（第一次使用需要下載）`));
+      await loadModels((p) => setStatus(p < 1 ? `下載 AI 模型… ${Math.round(p * 100)}%（第一次使用需要下載）` : '準備 AI 模型中…'));
     } catch (err) {
       setBusy(false);
       setStatus('AI 模型下載失敗，請確認網路後重新進入。', 'error');
@@ -205,8 +205,9 @@ async function runLoop(id) {
     const ms = performance.now() - t0;
     avgMs = avgMs ? avgMs * 0.8 + ms * 0.2 : ms;
     if (!paused) {
-      const n = tracker.visible().length;
-      setStatus(`${n ? `畫面中 ${n} 個車牌` : '對準車牌，保持手機穩定…'}｜每 ${(avgMs / 1000).toFixed(1)} 秒辨識一次`);
+      const n = visibleTracks().length;
+      const rate = avgMs < 1000 ? `每秒 ${(1000 / avgMs).toFixed(1)} 次` : `每 ${(avgMs / 1000).toFixed(1)} 秒一次`;
+      setStatus(`${n ? `畫面中 ${n} 個車牌` : '對準車牌，保持手機穩定…'}｜${rate}（${getBackend()}）`);
     }
     await sleep(Math.max(0, MIN_INTERVAL_MS - ms));
   }
@@ -229,6 +230,12 @@ function firstRecord(r) {
   return r.records?.[0];
 }
 
+/** 名單中完全相符的車牌，看到一次就立刻顯示；其他的要多看幾次確認 */
+function visibleTracks() {
+  const index = deps.getIndex();
+  return tracker.visible((t) => index.search(t.text).kind === 'exact');
+}
+
 function clearLabels() {
   labels.clear();
   $('live-overlay').replaceChildren();
@@ -239,7 +246,7 @@ function renderLabels() {
   const index = deps.getIndex();
   const seen = new Set();
 
-  for (const t of tracker.visible()) {
+  for (const t of visibleTracks()) {
     seen.add(t.id);
     const r = index.search(t.text);
     const status = statusOf(r);

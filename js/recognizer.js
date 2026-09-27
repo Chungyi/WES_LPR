@@ -1,7 +1,10 @@
 // 車牌辨識（全部在手機上執行）：車牌偵測（YOLOv9）→ 文字辨識（fast-plate-ocr）
 // 模型來源與授權見 models/README.md
 
-const ORT_URL = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.wasm.min.mjs';
+// 手機支援 WebGPU 時，車牌偵測改用 GPU 執行（約快 5～6 倍）；不支援時用 CPU（WASM）
+const ORT_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/';
+const ORT_WASM_URL = ORT_CDN + 'ort.wasm.min.mjs';
+const ORT_WEBGPU_URL = ORT_CDN + 'ort.webgpu.min.mjs';
 
 const DETECTOR = {
   url: 'models/plate-detector-yolov9t-640.onnx',
@@ -27,12 +30,26 @@ let ort = null;
 let detector = null;
 let ocr = null;
 let loading = null;
+let backend = 'CPU';
 
 const progressListeners = new Set();
 let lastProgress = 0;
 
 export function modelsReady() {
   return !!(detector && ocr);
+}
+
+/** 車牌偵測目前使用 'GPU' 或 'CPU' */
+export function getBackend() {
+  return backend;
+}
+
+async function hasWebGPU() {
+  try {
+    return !!(navigator.gpu && (await navigator.gpu.requestAdapter()));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -52,16 +69,34 @@ export function loadModels(onProgress) {
       progressListeners.forEach((fn) => fn(lastProgress));
     };
 
+    const useGpu = await hasWebGPU();
     const [ortModule, detBytes, ocrBytes] = await Promise.all([
-      import(ORT_URL),
+      import(useGpu ? ORT_WEBGPU_URL : ORT_WASM_URL),
       fetchWithProgress(DETECTOR.url, (n) => { received.det = n; report(); }),
       fetchWithProgress(OCR.url, (n) => { received.ocr = n; report(); }),
     ]);
     ort = ortModule;
     ort.env.wasm.numThreads = 1; // GitHub Pages 無法開啟跨來源隔離，多執行緒不可用
-    const opts = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
-    detector = await ort.InferenceSession.create(detBytes, opts);
-    ocr = await ort.InferenceSession.create(ocrBytes, opts);
+    const cpu = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
+
+    detector = null;
+    if (useGpu) {
+      try {
+        detector = await ort.InferenceSession.create(detBytes, { executionProviders: ['webgpu'], graphOptimizationLevel: 'all' });
+        await warmUp(detector, 'float32', [1, 3, DETECTOR.size, DETECTOR.size]);
+        backend = 'GPU';
+      } catch (err) {
+        console.warn('WebGPU 無法使用，改用 CPU', err);
+        detector = null;
+      }
+    }
+    if (!detector) {
+      detector = await ort.InferenceSession.create(detBytes, cpu);
+      backend = 'CPU';
+    }
+    // 文字辨識模型很小（每次約 1 毫秒），用 CPU 就夠快
+    ocr = await ort.InferenceSession.create(ocrBytes, cpu);
+    await warmUp(ocr, 'uint8', [1, OCR.height, OCR.width, 3]);
   })().catch((err) => {
     loading = null;
     lastProgress = 0;
@@ -69,6 +104,13 @@ export function loadModels(onProgress) {
   });
   const done = () => onProgress && progressListeners.delete(onProgress);
   return loading.finally(done);
+}
+
+/** 先用空白資料跑一次，第一張真實畫面就不會因為初始化而特別慢 */
+async function warmUp(session, type, dims) {
+  const size = dims.reduce((a, b) => a * b, 1);
+  const data = type === 'uint8' ? new Uint8Array(size) : new Float32Array(size);
+  await session.run({ [session.inputNames[0]]: new ort.Tensor(type, data, dims) });
 }
 
 async function fetchWithProgress(url, onBytes) {
