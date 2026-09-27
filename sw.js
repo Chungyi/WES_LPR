@@ -3,11 +3,12 @@
 // - AI 模型與 onnxruntime：快取優先，第一次下載後就不再重新下載
 //   （檔名或網址都帶有版本，模型更新時請改檔名）
 
-const SHELL_CACHE = 'wes-lpr-shell-v5';
+const SHELL_CACHE = 'wes-lpr-shell-v6';
 const MODEL_CACHE = 'wes-lpr-models-v1';
 const SHELL = [
   './',
   'index.html',
+  'about.html',
   'css/style.css',
   'js/app.js',
   'js/api.js',

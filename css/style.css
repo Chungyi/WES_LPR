@@ -384,6 +384,18 @@ dialog.sheet .muted { margin: 6px 0 0; }
 .info dd { margin: 0; display: grid; gap: 4px; }
 .info dd > div { display: flex; align-items: center; gap: 6px; }
 
+/* ---------- 系統說明連結 ---------- */
+
+.about-link {
+  display: block;
+  margin-top: 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  text-decoration: none;
+}
+.about-link:hover { color: var(--primary); text-decoration: underline; }
+
 /* ---------- 其他 ---------- */
 
 .toast {
