@@ -2,6 +2,9 @@
 <html lang="zh-Hant-TW">
 <head>
   <meta charset="utf-8">
+  <!-- 網頁安全政策：程式只能來自本站與 Google 登入，連線只能到本站、Google 登入、Apps Script 後端；
+       樣式允許 inline，是因為 Google 登入元件會在頁面插入樣式 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1d4ed8">
   <meta name="mobile-web-app-capable" content="yes">

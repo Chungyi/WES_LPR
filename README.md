@@ -34,6 +34,7 @@ js/recognizer.js      AI 辨識：車牌偵測 + 文字辨識（onnxruntime-web�
 js/live.js            即時辨識畫面（相機、疊加標籤、手電筒、暫停）
 js/tracker.js         即時辨識的車牌追蹤與多張畫面投票
 models/               AI 模型（來源與授權見 models/README.md）
+vendor/               AI 執行程式 onnxruntime-web 1.30.0（MIT，從 npm 下載並比對官方校驗碼）
 sw.js                 Service worker（快取程式與 AI 模型，不快取名單）
 manifest.webmanifest  PWA 設定
 apps-script/Code.gs   後端，貼到試算表的 Apps Script
@@ -54,4 +55,5 @@ python -m http.server 8080
 - Email 欄位不會下載到手機。
 - 手機上的名單 7 天後失效；登出，或帳號被移出授權登入名單時，會立即清除。
 - 拍照辨識全程在手機上執行，照片不會上傳、不會另存。
+- AI 執行程式放在 vendor/，不從外部 CDN 載入；index.html 以網頁安全政策（CSP）限制程式只能來自本站與 Google 登入。
 - 本程式庫只有程式碼與 AI 模型，**不可以**放入任何名單資料或車牌照片。

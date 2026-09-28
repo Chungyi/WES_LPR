@@ -1,10 +1,12 @@
 // 車牌辨識（全部在手機上執行）：車牌偵測（YOLOv9）→ 文字辨識（fast-plate-ocr）
 // 模型來源與授權見 models/README.md
 
+// AI 執行程式（onnxruntime-web）放在程式庫的 vendor/ 資料夾，不從外部 CDN 載入，
+// 避免外部網站被入侵時有惡意程式混進來。更新版本時請一起改資料夾名稱與這裡的路徑。
 // 手機支援 WebGPU 時，車牌偵測改用 GPU 執行（約快 5～6 倍）；不支援時用 CPU（WASM）
-const ORT_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/';
-const ORT_WASM_URL = ORT_CDN + 'ort.wasm.min.mjs';
-const ORT_WEBGPU_URL = ORT_CDN + 'ort.webgpu.min.mjs';
+const ORT_DIR = new URL('../vendor/onnxruntime-web-1.30.0/', import.meta.url).href;
+const ORT_WASM_URL = ORT_DIR + 'ort.wasm.min.mjs';
+const ORT_WEBGPU_URL = ORT_DIR + 'ort.webgpu.min.mjs';
 
 const DETECTOR = {
   url: 'models/plate-detector-yolov9t-640.onnx',
@@ -130,6 +132,7 @@ export function loadModels(onProgress) {
       fetchWithProgress(OCR.url, (n) => { received.ocr = n; report(); }),
     ]);
     ort = ortModule;
+    ort.env.wasm.wasmPaths = ORT_DIR;
     detModelBytes = detBytes;
     ort.env.wasm.numThreads = 1; // GitHub Pages 無法開啟跨來源隔離，多執行緒不可用
     const cpu = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };

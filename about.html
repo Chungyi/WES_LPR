@@ -2,6 +2,7 @@
 <html lang="zh-Hant-TW">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>校園車牌辨識查詢系統｜系統說明</title>
   <meta name="description" content="華盛頓雙語小學校園車牌辨識查詢系統：AI 在手機上辨識車牌、比對名單，用於校園違規停車查詢。">
@@ -211,30 +212,30 @@
   <div class="grid-2 row">
     <section class="card">
       <h2>技術架構組成</h2>
-      <p class="note">iPhone 第一次使用時需下載的內容（約 24 MB，之後存在手機上，不再重複下載）</p>
+      <p class="note">iPhone 第一次使用時需下載的內容（約 25 MB，之後存在手機上，不再重複下載）</p>
       <!-- 圓環：r=15.915 時周長為 100，dasharray 直接用百分比 -->
       <div class="donut-wrap">
       <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="下載內容組成圓環圖">
         <circle cx="21" cy="21" r="15.915" fill="none" stroke="#f1f5f9" stroke-width="7"/>
-        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#2563eb" stroke-width="7" stroke-dasharray="32.6 67.4" stroke-dashoffset="25"/>
-        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#f59e0b" stroke-width="7" stroke-dasharray="32.3 67.7" stroke-dashoffset="-7.6"/>
-        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#10b981" stroke-width="7" stroke-dasharray="21.9 78.1" stroke-dashoffset="-39.9"/>
-        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#e11d48" stroke-width="7" stroke-dasharray="12.8 87.2" stroke-dashoffset="-61.8"/>
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#2563eb" stroke-width="7" stroke-dasharray="31.8 68.2" stroke-dashoffset="25"/>
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#f59e0b" stroke-width="7" stroke-dasharray="31.5 68.5" stroke-dashoffset="-6.8"/>
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#10b981" stroke-width="7" stroke-dasharray="21.4 78.6" stroke-dashoffset="-38.3"/>
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#e11d48" stroke-width="7" stroke-dasharray="14.9 85.1" stroke-dashoffset="-59.7"/>
         <circle cx="21" cy="21" r="15.915" fill="none" stroke="#7c3aed" stroke-width="7" stroke-dasharray="0.8 99.2" stroke-dashoffset="-74.6"/>
-        <text x="21" y="20.5" text-anchor="middle" font-size="5" font-weight="900" fill="#1e293b">24 MB</text>
+        <text x="21" y="20.5" text-anchor="middle" font-size="5" font-weight="900" fill="#1e293b">25 MB</text>
         <text x="21" y="25.5" text-anchor="middle" font-size="2.6" fill="#64748b">首次下載</text>
       </svg>
       <ul class="legend">
         <li><i style="background:#2563eb"></i>車牌偵測模型（拍照用）<em>7.8 MB</em></li>
         <li><i style="background:#f59e0b"></i>快速偵測模型（iPhone 即時用）<em>7.8 MB</em></li>
         <li><i style="background:#10b981"></i>車牌文字辨識模型<em>5.3 MB</em></li>
-        <li><i style="background:#e11d48"></i>AI 執行程式（onnxruntime）<em>3.1 MB</em></li>
+        <li><i style="background:#e11d48"></i>AI 執行程式（onnxruntime）<em>3.7 MB</em></li>
         <li><i style="background:#7c3aed"></i>網頁程式本身<em>0.1 MB</em></li>
       </ul>
       </div>
       <ul class="tech">
         <li><b>前端：</b>HTML、CSS、JavaScript（PWA，可加入主畫面）</li>
-        <li><b>AI 引擎：</b>onnxruntime-web（CPU／GPU 自動選擇）</li>
+        <li><b>AI 引擎：</b>onnxruntime-web（CPU／GPU 自動選擇，由本站提供，不從外部載入）</li>
         <li><b>AI 模型：</b>YOLOv9 車牌偵測＋fast-plate-ocr 文字辨識</li>
         <li><b>登入：</b>Google 帳號（限 @wes.tc.edu.tw）</li>
         <li><b>後端：</b>Google Apps Script</li>
@@ -345,8 +346,8 @@
       <div><b>最少資料原則</b>下載到手機的名單不含 Email，只有查詢需要的欄位。</div>
       <div><b>名單定期失效</b>下載 7 天後自動失效；登出或被取消授權時立即清除。</div>
       <div><b>試算表不公開</b>試算表不分享給任何人，只能經後端驗證後讀取。</div>
-      <div><b>雙重驗證</b>Google 登入限學校網域，再比對授權登入名單。</div>
-      <div><b>下載留紀錄</b>每次下載（含被拒絕的嘗試）都會記錄在試算表。</div>
+      <div><b>雙重驗證、下載留紀錄</b>Google 登入限學校網域，再比對授權登入名單；每次下載（含被拒絕的嘗試）都會記錄。</div>
+      <div><b>程式不從外部載入</b>AI 執行程式放在本站，並以網頁安全政策（CSP）限制可載入的程式來源。</div>
     </div>
   </section>
 
@@ -361,7 +362,7 @@
       <li>名單 7 天後失效，按「<b>資料下載</b>」即可更新為最新名單。</li>
       <li>使用完畢建議按「<b>登出</b>」，手機上的名單會一併清除。</li>
     </ol>
-    <p class="note" style="margin-top:12px">第一次使用拍照或即時辨識時需下載 AI 模型（約 18～24 MB），建議在 Wi-Fi 環境下進行。</p>
+    <p class="note" style="margin-top:12px">第一次使用拍照或即時辨識時需下載 AI 模型（約 20～25 MB），建議在 Wi-Fi 環境下進行。</p>
   </section>
 
   <footer>
