@@ -28,8 +28,13 @@ const PLATE_FIELDS = {
 function doPost(e) {
   let email = '';
   let device = '';
+  let req;
   try {
-    const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (_) {
+    return json_({ ok: false, error: 'BAD_REQUEST' });
+  }
+  try {
     device = String(req.device || '').slice(0, 100);
     if (req.action !== 'download') return json_({ ok: false, error: 'BAD_REQUEST' });
 
@@ -53,7 +58,10 @@ function doPost(e) {
     });
   } catch (err) {
     console.error(err);
-    try { log_(email, '錯誤', 0, device); } catch (_) {}
+    // 只記錄已通過身分驗證的請求，避免任何人都能往「下載紀錄」寫入垃圾資料
+    if (email) {
+      try { log_(email, '錯誤', 0, device); } catch (_) {}
+    }
     return json_({ ok: false, error: 'SERVER_ERROR' });
   }
 }
@@ -65,7 +73,16 @@ function doGet() {
 
 /** 請 Google 驗證 ID Token，通過則回傳 token 內容，否則回傳 null */
 function verifyIdToken_(idToken) {
-  if (!idToken || typeof idToken !== 'string') return null;
+  if (!idToken || typeof idToken !== 'string' || idToken.length > 4096) return null;
+
+  // 先看 token 本身寫的內容（還沒驗證簽章），明顯不對就直接拒絕，
+  // 不必連線到 Google，避免有人大量亂打請求用光 Apps Script 的每日連線額度
+  const peek = peekClaims_(idToken);
+  if (!peek || peek.aud !== CONFIG.CLIENT_ID || peek.hd !== CONFIG.DOMAIN || Number(peek.exp) * 1000 <= Date.now()) {
+    return null;
+  }
+
+  // 再請 Google 驗證簽章；以 Google 回傳的內容為準
   const res = UrlFetchApp.fetch(
     'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken),
     { muteHttpExceptions: true }
@@ -81,6 +98,20 @@ function verifyIdToken_(idToken) {
 
   if (c.aud !== CONFIG.CLIENT_ID || !issuerOk || !notExpired || !verified || !domainOk) return null;
   return c;
+}
+
+/** 解開 JWT 的內容（不驗證簽章），格式不對時回傳 null */
+function peekClaims_(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    let b64 = parts[1];
+    while (b64.length % 4) b64 += '=';
+    const text = Utilities.newBlob(Utilities.base64DecodeWebSafe(b64)).getDataAsString('UTF-8');
+    return JSON.parse(text);
+  } catch (_) {
+    return null;
+  }
 }
 
 function isAuthorized_(email) {
