@@ -395,6 +395,7 @@ dialog.sheet .muted { margin: 6px 0 0; }
   text-decoration: none;
 }
 .about-link:hover { color: var(--primary); text-decoration: underline; }
+.credit { margin: 4px 0 0; text-align: center; color: var(--muted); font-size: 12px; }
 
 /* ---------- 其他 ---------- */
 

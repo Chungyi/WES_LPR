@@ -5,6 +5,8 @@
 - 網址：https://chungyi.github.io/WES_LPR/
 - 支援：iPhone 13 以後、Samsung Galaxy S23+ 的 Chrome
 - 部署步驟：[docs/部署說明.md](docs/部署說明.md)
+- 系統說明：https://chungyi.github.io/WES_LPR/about.html
+- 開發人員：黃忠義
 
 ## 開發進度
 
